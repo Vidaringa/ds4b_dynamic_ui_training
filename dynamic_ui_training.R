@@ -98,12 +98,35 @@ ui <- fixedPage(
         column(
             width = 4,
             class = "well",
-            p("Placeholder")
+            
+            selectInput(inputId  = "sales_metric_2",
+                        label    = "Sales Metric",
+                        choices  = c("Revenue", "Profit", "Qty"),
+                        selected = "Revenue"),
+            
+            selectInput(inputId  = "sales_region_2",
+                        label    = "Sales Region",
+                        choices  = c("North", "South", "East", "West"),
+                        selected = "North"),
+            
+            numericInput(inputId = "metric_value_2",
+                         label   = "Metric Percent",
+                         value   = 0.5),
+            
+            actionButton(inputId = "add_card_2",
+                         label   = "Add"),
+            
+            hr(),
+            uiOutput(outputId = "droplist"),
+            actionButton(inputId = "delete_card_2", label = "Drop")
+            
         ),
         
         column(
             width = 8,
-            p("Placeholder")
+            verbatimTextOutput(outputId = "favs_print"),
+            
+            uiOutput(outputId = "multi_card")
         )
         
     ),
@@ -138,16 +161,86 @@ server <- function(input, output, session) {
     # 2.0 Multi Item -----
     
     # 2.1 Reactive Values & Storing User Input ----
+    reactive_values <- reactiveValues()
+    reactive_values$favorites_tbl <- tibble()
+    
+    observeEvent(input$add_card_2, {
+        
+        new_row_tbl <- tibble(
+            sales_metric = input$sales_metric_2,
+            sales_region = input$sales_region_2,
+            metric_value = input$metric_value_2,
+        ) %>% 
+            mutate(id = str_glue("{sales_metric}_{sales_region}_{metric_value}"))
+        
+        reactive_values$favorites_tbl <- reactive_values$favorites_tbl %>% 
+            bind_rows(new_row_tbl) %>% 
+            distinct()
+        
+    })
+    
+    output$favs_print <- renderPrint({
+        
+        if (nrow(reactive_values$favorites_tbl > 0)) {
+            reactive_values$favorites_tbl
+        }
+    })
     
     
     # 2.2 Rendering Multiple Items (tagList & map) ----
+    output$multi_card <- renderUI({
+        
+        if (nrow(reactive_values$favorites_tbl) > 0) {
+            
+            reactive_values$favorites_tbl %>%
+                
+                # Split row-wise into a list
+                mutate(id = as_factor(id)) %>% 
+                split(.$id) %>% 
+            
+                # Map to data in the list to the info card elements
+                map(.f = function(data) {
+                    column(
+                        width = 4,
+                        info_card(
+                            title     = data$sales_metric,
+                            value     = data$sales_region,
+                            sub_value = data$metric_value,
+                            sub_icon  = ifelse(data$metric_value > 0, "arrow-up", "arrow-down"),
+                            sub_text_color = ifelse(data$metric_value > 0, "success", "danger")
+                            )
+                    )
+                }) %>% 
+                tagList()
+        }
+    })
     
     
     # 2.3 Rendering Inputs Items ----
+    output$droplist <- renderUI({
+        if (nrow(reactive_values$favorites_tbl > 0)) {
+            
+            selectInput(
+                inputId = "drop_item",
+                label   = "Item to Delete",
+                choices = reactive_values$favorites_tbl %>% pull(id)
+                )
+            
+        }
+    })
     
     
     # 2.4 Delete Item ----
-    
+    observeEvent(input$delete_card_2, {
+        
+        if (nrow(reactive_values$favorites_tbl > 0)) {
+            
+            reactive_values$favorites_tbl <- reactive_values$favorites_tbl %>% 
+                filter(!(id %in% input$drop_item))
+        } 
+        
+        
+    })
     
 }
 
